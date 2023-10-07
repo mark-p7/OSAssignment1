@@ -49,6 +49,7 @@ struct kernel_thread_frame
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
+static long long os_ticks;    /* # of timer ticks since OS booted. */
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -123,6 +124,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
+  struct list_elem *e;
 
   /* Update statistics. */
   if (t == idle_thread)
@@ -134,9 +136,31 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  os_ticks++;
+
+  // check if any blocked thread has slept for enough ticks
+  // if so, unblock it and put it in the ready list
+  for (e = list_begin (&all_list); e != list_end (&all_list);
+       e = list_next (e))
+    {
+      struct thread *t = list_entry (e, struct thread, allelem);
+      is_thread_ready(t);
+    }
+
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+}
+
+void
+is_thread_ready (struct thread *t)
+{
+  if (t->status == THREAD_BLOCKED && t->sleep_ticks <= os_ticks)
+    {
+      t->status = THREAD_READY;
+      t->sleep_ticks = 0;
+      list_push_back (&ready_list, &t->elem);
+    }
 }
 
 /* Prints thread statistics. */
@@ -294,6 +318,29 @@ thread_exit (void)
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
+}
+
+void
+thread_yield_for_ticks (int64_t ticks)
+{
+  struct thread *cur = thread_current ();
+  enum intr_level old_level;
+
+  ASSERT (!intr_context ());
+
+  old_level = intr_disable ();
+  if (ticks > 0) {
+    cur->sleep_ticks = ticks + os_ticks;
+    thread_block();
+  } else {
+      if (cur != idle_thread)
+      {
+          list_push_back (&ready_list, &cur->elem);
+      }
+    cur->status = THREAD_READY;
+    schedule ();
+  }
+  intr_set_level (old_level);
 }
 
 /* Yields the CPU.  The current thread is not put to sleep and
