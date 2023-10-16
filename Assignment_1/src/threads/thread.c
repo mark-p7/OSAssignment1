@@ -124,7 +124,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-  struct list_elem *e;
+  //struct list_elem *e;
 
   /* Update statistics. */
   if (t == idle_thread)
@@ -140,16 +140,29 @@ thread_tick (void)
 
   // check if any blocked thread has slept for enough ticks
   // if so, unblock it and put it in the ready list
-  for (e = list_begin (&all_list); e != list_end (&all_list);
-       e = list_next (e))
-    {
-      struct thread *t = list_entry (e, struct thread, allelem);
-      is_thread_ready(t);
-    }
+//  for (e = list_begin (&all_list); e != list_end (&all_list);
+//       e = list_next (e))
+//    {
+//      struct thread *t = list_entry (e, struct thread, allelem);
+//      is_thread_ready(t);
+//    }
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
     intr_yield_on_return ();
+}
+
+void wakeup_threads (void) {
+    struct list_elem *e;
+    for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e))
+        {
+        struct thread *t = list_entry (e, struct thread, allelem);
+        if (t->status == THREAD_BLOCKED && t->sleep_ticks <= os_ticks)
+            {
+                thread_unblock(t);
+                t->sleep_ticks = 0;
+            }
+    }
 }
 
 void
@@ -443,6 +456,7 @@ idle (void *idle_started_ UNUSED)
     {
       /* Let someone else run. */
       intr_disable ();
+      wakeup_threads();
       thread_block ();
 
       /* Re-enable interrupts and wait for the next one.
