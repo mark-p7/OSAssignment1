@@ -1,0 +1,64 @@
++-----------------+
+|   COMP 7035     |
+|  ASSIGNMENT 1   |
+| DESIGN DOCUMENT |
++-----------------+
+
+---- GROUP ----
+
+Connor Young <cyoung124@my.bcit.ca>
+Mark De Guzman <markdeguzman1142@gmail.com>
+
+---- PRELIMINARIES ----
+
+None.
+
+                            TIMER_SLEEP
+                            ===========
+
+---- DATA STRUCTURES ----
+
+Added to thread.c:
+
+    static long long os_ticks; //tracks total ticks since OS boot
+
+Added to struct thread:
+
+    /* Members for implementing thread_join(). */
+    int64_t sleep_ticks; //tracks sleep ticks for threads that run timer_sleep()
+
+---- ALGORITHMS ----
+
+Modified timer_sleep:
+
+    Removed busy-waiting code and replaced with a call to new function, thread_yield_for_ticks(int64_t ticks)
+
+Implemented thread_yield_for_ticks(int64_t ticks):
+
+    Sets the sleep_ticks property for current thread and blocks it. If ticks is 0, behave like thread_yield().
+
+Implemented wakeup_thread():
+
+    Sequentially search for threads in all_list for sleeping threads, check if they have slept enough, then unblock
+    them.
+
+---- SYNCHRONIZATION ----
+
+    As long as the main thread sleeps a sufficient amount of time, all test threads should be woken up and exit.
+    Otherwise, a test thread can be blocked indefinitely and cause a kernel panic.
+
+---- RATIONALE ----
+
+    If a thread want to sleep, it will be blocked and removed from the ready queue.
+
+    The idle thread runs if there are no ready threads available. In the alarm-single test case, this occurs when
+    the main thread and test threads are all blocked after calling thread_yield_for_ticks().
+
+    Everytime the idle thread runs, it will check if any threads are available to wakeup, unblock them, and put them
+    in the ready list.
+
+    Disadvantages:
+    -   Interrupts are blocked for wakeup_threads(), a function that runs at O(n), decreasing overall performance and
+        making system more vulnerable to crashes and data loss.
+    -   There are more efficient ways to find threads that are finished sleeping than a sequential search.
+
