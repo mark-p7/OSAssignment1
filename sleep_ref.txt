@@ -11,7 +11,7 @@ Mark De Guzman <markdeguzman1142@gmail.com>
 
 ---- PRELIMINARIES ----
 
-None.
+All modified code is in the Assignment_1 folder. The CSCC69-Pintos is the original pintos source.
 
                             TIMER_SLEEP
                             ===========
