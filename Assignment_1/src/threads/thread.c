@@ -644,6 +644,12 @@ allocate_tid (void)
 
   return tid;
 }
+
+void sort_ready_list(void)
+{
+  list_sort(&ready_list, less_priority, 0);
+}
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
