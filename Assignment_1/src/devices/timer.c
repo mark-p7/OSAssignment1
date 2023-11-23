@@ -8,7 +8,8 @@
 #include "threads/synch.h"
 #include "threads/thread.h"
 #include "threads/fixed_point.h"
-  
+#include "list.h"
+
 /* See [8254] for hardware details of the 8254 timer chip. */
 
 #if TIMER_FREQ < 19
@@ -31,6 +32,8 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
+static struct list sleeping_threads;
+
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
@@ -38,6 +41,7 @@ timer_init (void)
 {
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
+  list_init(&sleeping_threads);
 }
 
 /* Calibrates loops_per_tick, used to implement brief delays. */
@@ -85,13 +89,55 @@ timer_elapsed (int64_t then)
   return timer_ticks () - then;
 }
 
+static bool compare_time(struct list_elem *l1, struct list_elem *l2, void *aux)
+{
+  struct thread *t1 = list_entry(l1,struct thread,elem);
+  struct thread *t2 = list_entry(l2,struct thread,elem);
+
+  if( t1->wakeup_time < t2->wakeup_time)
+    return true;
+  else if (t1->wakeup_time == t2->wakeup_time){
+    if( t1->priority > t2->priority)
+      return true;
+  }
+
+  return false;
+}
+
 /* Sleeps for approximately TICKS timer ticks.  Interrupts must
    be turned on. */
 void
 timer_sleep (int64_t ticks) 
 {
-  ASSERT (intr_get_level () == INTR_ON);
-  thread_yield_for_ticks(ticks);
+
+//  ASSERT (intr_get_level () == INTR_ON);
+//  while (timer_elapsed (start) < ticks)
+//    thread_yield ();
+//  ASSERT (intr_get_level () == INTR_ON);
+//  thread_yield_for_ticks(ticks);
+    struct lock sleep_lock;
+    lock_init (&sleep_lock);
+    lock_acquire (&sleep_lock);
+
+
+    ASSERT (intr_get_level () == INTR_ON);
+    struct thread *cur = thread_current ();
+
+    int64_t start = timer_ticks ();
+    thread_current()->wakeup_time = start + ticks;
+    list_insert_ordered(&sleeping_threads, &cur->elem, compare_time, 0);
+
+    enum intr_level old_level;
+    // Disable interrupt
+    old_level = intr_disable ();
+
+    thread_block();
+
+    // Enable interrupt
+    intr_set_level (old_level);
+
+    lock_release (&sleep_lock);
+
 }
 
 void
@@ -180,6 +226,7 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+  wakeup_thread();
   thread_tick ();
   if (thread_mlfqs)
   {
@@ -187,9 +234,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
     if (ticks % TIMER_FREQ == 0) /* do this every second */
     {
       thread_set_load_avg ();
+      //printf("%d\n", thread_get_load_avg());
       thread_set_all_recent_cpu ();
     }
-    if (ticks > 0 && ticks % 4 == 0) /* update priorities every 4th tick */
+    if (ticks % 4 == 3) /* update priorities every 4th tick */
       thread_set_all_mlfqs_priority ();
   }
 }
@@ -264,3 +312,21 @@ real_time_delay (int64_t num, int32_t denom)
   ASSERT (denom % 1000 == 0);
   busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000)); 
 }
+
+void wakeup_thread (void) {
+  while (true) {
+    if (list_empty(&sleeping_threads))
+      return;
+
+    struct list_elem *top_elem = list_front(&sleeping_threads);
+
+    if (list_entry(top_elem, struct thread, elem)->wakeup_time <= ticks){
+      struct thread *top_thread = list_entry(top_elem, struct thread, elem);
+      list_pop_front(&sleeping_threads);
+      thread_unblock(top_thread);
+    }
+    else
+    return;
+  }
+}
+

@@ -93,6 +93,8 @@ struct thread
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    int64_t wakeup_time;                /* WakeUp time for a sleeping thread. */
+
     int nice;                           /* nice value of a thread */
     int recent_cpu;                     /* recent cpu usage */
 

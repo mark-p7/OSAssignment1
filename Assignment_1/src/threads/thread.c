@@ -534,7 +534,7 @@ idle (void *idle_started_ UNUSED)
     {
       /* Let someone else run. */
       intr_disable ();
-      wakeup_threads();
+      //wakeup_threads();
       thread_block ();
 
       /* Re-enable interrupts and wait for the next one.
